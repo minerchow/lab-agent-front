@@ -1,0 +1,73 @@
+{
+  "name": "rsbuild-h5",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "cross-env CROSS_ENV=dev rsbuild dev --open",
+    "build:test": "cross-env CROSS_ENV=test rsbuild build",
+    "build:uat": "cross-env CROSS_ENV=test rsbuild build",
+    "build:prod": "cross-env CROSS_ENV=production rsbuild build",
+    "preview": "rsbuild preview",
+    "build-sw": "node scripts/build-sw.js",
+    "format": "prettier --write .",
+    "prepare": "husky install",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx src",
+    "check": "npm run type-check && npm run lint && npm run build:test",
+    "test": "npm run check"
+  },
+  "dependencies": {
+    "@types/axios": "^0.9.36",
+    "antd": "^6.6.3",
+    "axios": "^1.12.2",
+    "jwt-decode": "^4.0.0",
+    "mobx": "^6.13.7",
+    "mobx-react": "^9.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.28.2",
+    "workbox-core": "^7.3.0",
+    "workbox-precaching": "^7.3.0",
+    "workbox-routing": "^7.3.0",
+    "workbox-strategies": "^7.3.0",
+    "workbox-sw": "^7.3.0"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^1.1.8",
+    "@rsbuild/plugin-basic-ssl": "^1.2.1",
+    "@rsbuild/plugin-eslint": "^1.1.1",
+    "@rsbuild/plugin-react": "^1.0.7",
+    "@rsbuild/plugin-sass": "^1.2.0",
+    "@rsbuild/plugin-type-check": "^1.3.2",
+    "@rspack/core": "^1.2.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/workbox-precaching": "^5.0.0",
+    "@types/workbox-sw": "^4.3.7",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0",
+    "autoprefixer": "^10.4.21",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "chalk": "^5.3.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-prettier": "^5.4.0",
+    "eslint-plugin-react": "^7.32.2",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "html-webpack-plugin": "^5.6.3",
+    "husky": "^8.0.3",
+    "lint-staged": "^14.0.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.7.2",
+    "workbox-build": "^7.3.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --fix",
+      "tsc --noEmit"
+    ],
+    "*.{js,jsx,md,json}": "prettier --write"
+  }
+}
