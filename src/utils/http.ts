@@ -1,6 +1,7 @@
 import axios from "axios";
 import { CookieUtil } from "./cookie";
 import { isApp } from "./device";
+import { tauthtsBase } from "@/config";
 
 // 创建 axios 实例
 const service = axios.create({
@@ -79,39 +80,22 @@ const refreshAccessToken = async () => {
       timeout: 10000,
     });
 
-    // 从配置文件获取client_id
-
-    // 构建刷新token的请求数据
-    const refreshData = {
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: "qh-tesla-app",
-      mark: 1,
-      deviceId: "18171adc022bf26d4fd",
-    };
-
     // 发送刷新token请求
     const response: any = await refreshService.post(
-      "/oauth/token",
-      transformFormData(refreshData),
+      `${tauthtsBase()}/api/users/refresh`,
       {
-        headers: {
-          "Content-Type": ContentType.FORM_URLENCODED,
-          code: "xxx",
-        },
+        refresh_token: refreshToken,
       }
     );
 
-    if (response.data && response.data.access_token) {
+    const tokenData = response.data?.data;
+    if (tokenData && tokenData.access_token) {
       // 更新Cookie中的token
-      storeTokensInCookie(
-        response.data.access_token,
-        response.data.refresh_token
-      );
+      storeTokensInCookie(tokenData.access_token, tokenData.refresh_token);
 
       // 通知所有等待的请求
       refreshSubscribers.forEach((callback) =>
-        callback(response.data.access_token)
+        callback(tokenData.access_token)
       );
       refreshSubscribers = [];
 

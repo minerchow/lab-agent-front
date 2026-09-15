@@ -4,12 +4,12 @@ interface Role {
   name: string;
 }
 
-interface User {
+export interface User {
   username: string;
   id: number;
   nickname: string | null;
   avatar: string | null;
-  roles: Role[];
+  roles?: Role[];
 }
 
 interface Token {
@@ -42,7 +42,6 @@ export interface RegisterParams {
   password: string;
   confirm_password?: string;
 }
-
 
 /**
  * 登录响应接口类型（继承基础响应接口）
