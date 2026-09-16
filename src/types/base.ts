@@ -14,7 +14,7 @@ export interface BaseResponse<T = any> {
  * 分页响应数据的基础接口
  */
 export interface PageData<T = any> {
-  list: T[];
+  items: T[];
   total: number;
   page: number;
   size: number;

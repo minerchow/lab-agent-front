@@ -34,7 +34,7 @@ export interface UserListData {
 // 用户列表响应 - 使用分页响应接口
 export interface UserListResponse extends PageResponse<UserListData> {
   data: {
-    list: UserListData[];
+    items: UserListData[];
     total: number;
     page: number;
     size: number;
