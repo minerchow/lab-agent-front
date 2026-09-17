@@ -8,6 +8,7 @@ const Register = lazy(() => import("./pages/Register"));
 const Count = lazy(() => import("./pages/count"));
 const UserInfo = lazy(() => import("./pages/userinfo"));
 const Role = lazy(() => import("./pages/role"));
+const Lab = lazy(() => import("./pages/lab"));
 export const routes: RouteObject[] = [
   {
     path: "/",
@@ -32,5 +33,9 @@ export const routes: RouteObject[] = [
   {
     path: "/roles",
     element: <Role />,
+  },
+  {
+    path: "/labs",
+    element: <Lab />,
   },
 ];
