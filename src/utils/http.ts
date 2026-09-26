@@ -12,10 +12,8 @@ const service = axios.create({
   },
 });
 
-// 用于标记是否正在刷新token，防止递归
-let isRefreshing = false;
-// 存储等待刷新token的请求
-let refreshSubscribers: ((token: string) => void)[] = [];
+// 正在进行中的刷新请求，并发调用共享同一次刷新，避免重复请求
+let refreshPromise: Promise<string> | null = null;
 
 /**
  * 存储token到Cookie（带过期时间）
@@ -67,14 +65,16 @@ const clearTokensFromCookie = () => {
 
 /**
  * 刷新accessToken
+ * @returns 新的accessToken
  */
-const refreshAccessToken = async () => {
+const refreshAccessToken = async (): Promise<string> => {
   const { refreshToken } = getTokensFromCookie();
-  if (!refreshToken) {
-    throw new Error("没有refreshToken");
-  }
 
   try {
+    if (!refreshToken) {
+      throw new Error("没有refreshToken");
+    }
+
     // 使用原生axios实例，避免拦截器递归
     const refreshService = axios.create({
       timeout: 10000,
@@ -89,26 +89,58 @@ const refreshAccessToken = async () => {
     );
 
     const tokenData = response.data?.data;
-    if (tokenData && tokenData.access_token) {
-      // 更新Cookie中的token
-      storeTokensInCookie(tokenData.access_token, tokenData.refresh_token);
-
-      // 通知所有等待的请求
-      refreshSubscribers.forEach((callback) =>
-        callback(tokenData.access_token)
-      );
-      refreshSubscribers = [];
-
-      console.log("token刷新成功");
-    } else {
+    if (!tokenData || !tokenData.access_token) {
       throw new Error("刷新token响应格式错误");
     }
+
+    // 更新Cookie中的token
+    storeTokensInCookie(tokenData.access_token, tokenData.refresh_token);
+
+    console.log("token刷新成功");
+    return tokenData.access_token;
   } catch (error) {
     console.error("刷新token失败:", error);
     // 清除Cookie中的token
     clearTokensFromCookie();
     throw error;
   }
+};
+
+/**
+ * 并发去重的token刷新：多个请求同时触发401时只发一次刷新请求
+ */
+const refreshAccessTokenOnce = (): Promise<string> => {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+};
+
+/**
+ * 刷新accessToken，失败时清除token并跳转登录页
+ * 同时导出给 fetch/SSE 等非 axios 请求在收到 401 时刷新重试
+ */
+export const refreshTokenWithRedirect = async (): Promise<string> => {
+  try {
+    return await refreshAccessTokenOnce();
+  } catch (error) {
+    clearTokensFromCookie();
+    window.location.href = "/login";
+    throw error;
+  }
+};
+
+/**
+ * 判断业务返回体是否为未授权（code 或 status 为 401）
+ */
+const isUnauthorizedBody = (data: any): boolean => {
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+  const code = data.code ?? data.status;
+  return Number(code) === 401;
 };
 
 // 请求拦截器
@@ -132,26 +164,12 @@ service.interceptors.request.use(
 
         // 如果没有accessToken，刷新token
         if (!accessToken) {
-          if (!isRefreshing) {
-            isRefreshing = true;
-            try {
-              await refreshAccessToken();
-              const { accessToken: newAccessToken } = getTokensFromCookie();
-              config.headers["Authorization"] = "Bearer " + newAccessToken;
-            } catch (error) {
-              console.error("刷新token失败:", error);
-              return Promise.reject(error);
-            } finally {
-              isRefreshing = false;
-            }
-          } else {
-            // 如果正在刷新，等待刷新完成
-            return new Promise((resolve) => {
-              refreshSubscribers.push((token: string) => {
-                config.headers["Authorization"] = "Bearer " + token;
-                resolve(config);
-              });
-            });
+          try {
+            const newAccessToken = await refreshTokenWithRedirect();
+            config.headers["Authorization"] = "Bearer " + newAccessToken;
+          } catch (error) {
+            console.error("刷新token失败:", error);
+            return Promise.reject(error);
           }
         } else {
           // 有accessToken，直接使用
@@ -174,51 +192,56 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response: any) => {
     // 统一剥掉axios外层，直接返回业务响应体 {code, message, data}，调用方少写一层 .data
-    return response.data;
+    const data = response.data;
+    const originalRequest = response.config;
+    // 返回体中的401（HTTP 200但code/status为401）：刷新token后重试原请求
+    if (
+      isUnauthorizedBody(data) &&
+      !originalRequest?.noToken &&
+      !isApp() &&
+      originalRequest
+    ) {
+      // 避免无限重试
+      if (!originalRequest._retry) {
+        originalRequest._retry = true;
+        return refreshTokenWithRedirect().then((token) => {
+          originalRequest.headers["Authorization"] = "Bearer " + token;
+          return service(originalRequest);
+        });
+      }
+      // 已重试过仍返回401，直接把结果交给调用方处理
+    }
+
+    return data;
   },
   async (error: any) => {
     // 处理响应错误
     console.error("响应错误:", error);
+    const originalRequest = error.config;
+
     // 免token请求（如登录/注册）不走401刷新逻辑，避免跳转导致页面刷新
-    if (error.config?.noToken) {
+    if (originalRequest?.noToken) {
       return Promise.reject(error);
     }
-    if (error.response?.status === 401 && !isApp()) {
-      // 处理未授权错误
-      const originalRequest = error.config;
 
-      // 避免无限重试
-      if (!originalRequest._retry) {
-        originalRequest._retry = true;
+    // HTTP状态码401（或响应体code为401）：刷新token后重试原请求
+    // 注意：error.response 是 AxiosResponse，HTTP状态码在 status 上，
+    // 业务码（如 {"code":401,"message":"Invalid token"}）在 data 上
+    const response = error.response;
+    if (
+      (response?.status === 401 || isUnauthorizedBody(response?.data)) &&
+      !isApp() &&
+      originalRequest &&
+      !originalRequest._retry
+    ) {
+      originalRequest._retry = true;
 
-        if (!isRefreshing) {
-          isRefreshing = true;
-
-          try {
-            await refreshAccessToken();
-            isRefreshing = false;
-
-            // 重试原始请求
-            const { accessToken: newAccessToken } = getTokensFromCookie();
-            originalRequest.headers["Authorization"] =
-              "Bearer " + newAccessToken;
-            return service(originalRequest);
-          } catch (refreshError) {
-            isRefreshing = false;
-            // 刷新失败，跳转到登录页
-            clearTokensFromCookie();
-            window.location.href = "/login";
-            return Promise.reject(refreshError);
-          }
-        } else {
-          // 如果正在刷新，等待刷新完成后再重试
-          return new Promise((resolve) => {
-            refreshSubscribers.push((token: string) => {
-              originalRequest.headers["Authorization"] = "Bearer " + token;
-              resolve(service(originalRequest));
-            });
-          });
-        }
+      try {
+        const newAccessToken = await refreshTokenWithRedirect();
+        originalRequest.headers["Authorization"] = "Bearer " + newAccessToken;
+        return service(originalRequest);
+      } catch (refreshError) {
+        return Promise.reject(refreshError);
       }
     }
 
@@ -331,6 +354,32 @@ export const clearAuthTokens = () => {
  */
 export const getAccessToken = (): string | null => {
   return CookieUtil.getCookie("accesstoken");
+};
+
+/**
+ * 确保存在可用的 accessToken（缺失时自动刷新），供 fetch/SSE 等
+ * 非 axios 请求复用与拦截器一致的鉴权逻辑
+ * @returns accessToken，未登录或刷新失败时返回 null
+ */
+export const ensureAccessToken = async (): Promise<string | null> => {
+  if (isApp()) {
+    return null;
+  }
+
+  const { accessToken, refreshToken } = getTokensFromCookie();
+  if (!refreshToken) {
+    return null;
+  }
+  if (accessToken) {
+    return accessToken;
+  }
+
+  try {
+    await refreshAccessTokenOnce();
+    return getAccessToken();
+  } catch {
+    return null;
+  }
 };
 
 /**

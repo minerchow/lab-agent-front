@@ -17,7 +17,9 @@
     "test": "npm run check"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.117",
     "@types/axios": "^0.9.36",
+    "ai": "^7.0.114",
     "antd": "^6.6.3",
     "axios": "^1.12.2",
     "jwt-decode": "^4.0.0",

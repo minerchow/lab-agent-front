@@ -9,6 +9,9 @@ const Count = lazy(() => import("./pages/count"));
 const UserInfo = lazy(() => import("./pages/userinfo"));
 const Role = lazy(() => import("./pages/role"));
 const Lab = lazy(() => import("./pages/lab"));
+const Equipment = lazy(() => import("./pages/equipment"));
+const Reservation = lazy(() => import("./pages/reservation"));
+const Chat = lazy(() => import("./pages/chat"));
 export const routes: RouteObject[] = [
   {
     path: "/",
@@ -37,5 +40,17 @@ export const routes: RouteObject[] = [
   {
     path: "/labs",
     element: <Lab />,
+  },
+  {
+    path: "/equipments",
+    element: <Equipment />,
+  },
+  {
+    path: "/reservations",
+    element: <Reservation />,
+  },
+  {
+    path: "/chat",
+    element: <Chat />,
   },
 ];
